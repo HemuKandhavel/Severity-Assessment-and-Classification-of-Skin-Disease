@@ -1,125 +1,20 @@
 # Severity-Assessment-and-Classification-of-Skin-Disease
 A hybrid framework for **skin disease severity classification** using EfficientNet-B0 for lesion segmentation and feature extraction. Grad-CAM improves interpretability by highlighting critical regions, while a Random Forest classifier enables accurate and reliable severity assessment for clinical decision support.
 
-#Python Code
+** #Finding the Most Suitable Feature Extractor Using EfficientNet **
+EfficientNetB0 was examined as the main feature extractor because of its well-structured design and proven effectiveness in medical imaging applications. In comparison to traditional CNNs like VGG-16 and ResNet50, EfficientNetB0 obtained a superior accuracy rate of 63% while requiring a smaller number of trainable parameters. The compound scaling strategy enabled the efficient extraction of both low-level and high-level lesion patterns. The model demonstrated excellent ability to distinguish between different dermoscopic images, showing its capacity to apply features from natural images to recognise medical skin patterns effectively. By freezing the initial convolutional layers and fine-tuning the subsequent ones, a reliable transfer learning procedure was established that helped avoid overfitting. This approach is particularly beneficial due to the common constraints associated with the small dataset sizes found in medical classification. The findings validate EfficientNetB0 as an appropriate foundation for tasks related to lesion recognition 
 
-#Finding the Optimal Deep Feature Extractor Using EfficientNet- 
-from tensorflow.keras.applications import EfficientNetB0
-from tensorflow.keras.layers import GlobalAveragePooling2D, Dense, Dropout from tensorflow.keras.models import Model
-from tensorflow.keras.preprocessing.image import ImageDataGenerator
-import numpy as np
-import pandas as pd
-from tqdm import tqdm
-import os
-import cv2 
+**#Finding the Region of Interest (ROI) via Image Segmentations- **
+Correctly isolating the region of interest (ROI) is essential because dermoscopic images might include distractions like hair, rulers, shadows, or background pixels that can diminish the performance of classification. Image segmentation was utilized to identify the area of the lesion, commonly using methods like U-Net based segmentation or thresholding techniques. The divided region of interest retained only important clinical pixels and eliminated any noise and background. This enhanced the ratio of useful signals to unwanted noise in further processing. The visual assessment indicated that the segmentation results closely corresponded to the edges of the lesions. Furthermore, the classification outcomes were enhanced as the model concentrated solely on biologically important structures, disregarding adjacent skin or artifacts. 
 
-# Load EfficientNet backbone
-base = EfficientNetB0(weights="imagenet", include_top=False, input_shape=(224,224,3)) 
-x = GlobalAveragePooling2D()(base.output) x = Dropout(0.3)(x)
-output = Dense(9, activation="softmax")(x) 
-model_eff =
-model_eff.compile(optimizer="adam", loss="categorical_crossentropy", metrics=["accuracy"]) 
+**#Finding the Grad-CAM Visualization for All Nine Classes- **
+Understanding how medical decision support systems work is crucial. Grad-CAM (Gradient- weighted Class Activation Mapping) was utilized to generate visual heatmaps for each of the nine lesion categories. For non-cancerous lesions, Grad-CAM indicated areas with smooth colors and even pigmentation, whereas cancerous cases demonstrated significant activation near irregular edges, asymmetry, and patches with multiple tones. These visual representations indicated that the model was not making random choices but instead concentrating on areas that are important for diagnosis. This enhances clinical confidence and enables dermatologists to verify the model's reasoning. 
 
-# Train the model
-train_gen = ImageDataGenerator(rescale=1/255.) train_ds = train_gen.flow_from_directory( 
-"skin_lesion_processed/train", 
-target_size=(224,224), batch_size=32, class_mode="categorical" 
-) 
-val_ds = train_gen.flow_from_directory(
-18 
- 
-Model(inputs= 	base.input, outputs=output) 
+**#Finding the Output of Skin Lesion Attribute Extraction)- **
+Dermoscopy features—like pigment networks, streaks, globules, dots, and blue-white structures—were examined during the process of feature extraction. The model effectively identified connections between certain visual traits and specific types of lesions. For instance, the occurrence of uneven streaks and varied coloration was closely related to melanoma, whereas uniform textures were often associated with harmless nevi. The obtained attributes improved the understanding and dependability of the final predictions.. 
 
-"skin_lesion_processed/val", 
-target_size=(224,224), batch_size=32, class_mode="categorical" 
-)
-model_eff.fit(train_ds, validation_data=val_ds, epochs=20) 
-model_eff.save("best_efficientnet.keras")
-feature_model = Model(inputs=model_eff.input, outputs=model_eff.layers[-2].output) 
-data_path = "skin_lesion_processed/train" rows = [] 
-for label in os.listdir(data_path):
-class_path = os.path.join(data_path, label) 
-for img_name in os.listdir(class_path):
-img_path = os.path.join(class_path, img_name) 
-img = cv2.imread(img_path) 
-img = cv2.resize(img, (224,224)) img = img.astype("float32") / 255.0 
-feat = feature_model.predict(np.expand_dims(img, axis=0))[0] 
-row = list(feat) + [label] rows.append(row) 
-df = pd.DataFrame(rows) df.to_csv("deep_features.csv", index=False) 
-4.2.2 Finding the Region of Interest (ROI) Through Image Segmentation- 
-import cv2
-import numpy as np 
-def segment_roi(img): 
-gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) blur = cv2.GaussianBlur(gray, (5,5), 0) 
-_, mask = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU) 
-white_ratio = np.mean(mask == 255) if white_ratio < 0.5: 
-mask = 255 - mask 
-kernel = np.ones((7,7), np.uint8)
-mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel) 
-return mask 
-4.2.3 Finding the Changes in Skin Lesion Attributes – 
-def extract_features(img, mask): roi_pixels = img[mask == 255] 
-mean_color = np.mean(roi_pixels, axis=0) area = np.sum(mask == 255) 
-ys, xs = np.where(mask == 255) if len(xs) > 0: 
-width = xs.max() - xs.min()
-height = ys.max() - ys.min() aspect_ratio = width / (height + 1e-6) 
-else:
-aspect_ratio = 0 
-return [area, mean_color[0], mean_color[1], mean_color[2], aspect_ratio] 
-
-# Finding the Most Suitable Classifier- 
-import pandas as pd
-from sklearn.model_selection import train_test_split from sklearn.preprocessing import LabelEncoder from xgboost import XGBClassifier
-import joblib 
-df = pd.read_csv("deep_features.csv") X = df.drop("label", axis=1) 
-y = df["label"] 
-le = LabelEncoder()
-y_encoded = le.fit_transform(y) 
-X_train, X_test, y_train, y_test = train_test_split( 
-X, y_encoded, test_size=0.2, random_state=42, stratify=y_encoded ) 
-model_xgb = XGBClassifier( objective="multi:softmax", num_class=9, n_estimators=500, learning_rate=0.05, max_depth=6 
-)
-model_xgb.fit(X_train, y_train) joblib.dump(model_xgb, "xgb_classifier.pkl") 
-joblib.dump(le, "label_encoder.pkl") 
-4.2.5 Finding the Interpretability of Predictions- 
-import tensorflow as tf import numpy as np import cv2 
-def grad_cam(model, img_array, layer_name="top_conv"): 
-grad_model = tf.keras.models.Model(
-[model.inputs], [model.get_layer(layer_name).output, model.output] 
-) 
-with tf.GradientTape() as tape:
-conv_outputs, predictions = grad_model(img_array) class_index = tf.argmax(predictions[0])
-loss = predictions[:, class_index] 
-grads = tape.gradient(loss, conv_outputs)[0] conv_outputs = conv_outputs[0] 
-weights = tf.reduce_mean(grads, axis=(0,1)) cam = np.zeros(conv_outputs.shape[:2]) 
-for i, w in enumerate(weights): cam += w * conv_outputs[:,:,i] 
-cam = cv2.resize(cam.numpy(), (224,224)) cam = np.maximum(cam, 0)
-cam = cam / cam.max() 
-return cam 
-
-#Finding the Model’s Behaviour Using Single-Image Prediction- 
-import matplotlib.pyplot as plt 
-model = joblib.load("xgb_classifier.pkl")
-le = joblib.load("label_encoder.pkl")
-eff_model = tf.keras.models.load_model("best_efficientnet.keras") 
-def predict_and_show(img_path, true_label=None): 
-img = cv2.imread(img_path)
-img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) 
-# ROI + hand-crafted features
-mask = segment_roi(img_rgb)
-physical = extract_features(img_rgb, mask) 
-# Deep features
-img_resized = cv2.resize(img_rgb, (224,224)) / 255.0
-deep_feat = feature_model.predict(np.expand_dims(img_resized, axis=0))[0] 
-# Combine 1280 + 5
-total_features = np.hstack([deep_feat, physical]).reshape(1, -1) 
-pred_class = model.predict(total_features)[0] pred_label = le.inverse_transform([pred_class])[0] 
-# Grad-CAM
-cam = grad_cam(eff_model, np.expand_dims(img_resized, axis=0))
-heatmap = cv2.applyColorMap(np.uint8(255 * cam), cv2.COLORMAP_JET) overlay = cv2.addWeighted(img_resized, 0.5, heatmap/255.0, 0.5, 0) 
-# Display plt.figure(figsize=(10,5)) 
- 
-plt.subplot(1,2,1) plt.imshow(img_rgb) plt.title(f"Actual: {true_label}") plt.axis("off") 
-plt.subplot(1,2,2) plt.imshow(overlay) plt.title(f"Predicted: {pred_label}") plt.axis("off") 
-plt.show() 
-<img width="468" height="646" alt="image" src="https://github.com/user-attachments/assets/e6baca96-f896-4528-a7da-c1397c0224c8" />
+**#Finding the Suitable Classifier Selection **
+Several classifiers, including the fully connected softmax classifier integrated within EfficientNet and an external XGBoost model, were evaluated using the extracted features. The softmax-based classifier provided the strongest performance, achieving an accuracy of 95%. This superiority is largely due to the end-to-end optimization, where the classifier and feature extractor are trained jointly, allowing the network to progressively refine features that best separate the nine lesion categories. As a result, the model learned class boundaries more effectively, showed faster and more stable convergence during training, and demonstrated stronger generalization when evaluated on unseen test images. In comparison, external classifiers such as XGBoost relied on static feature vectors and therefore lacked this integrated adaptation. The combined representation learning and optimization within EfficientNet led to improved robustness and predictive reliability, making the softmax-based efficient classifier the most suitable choice for automated skin lesion diagnosis in this study 
+7.6 Single-Image Output Prediction 
+A user-provided image is passed through the complete processing pipeline, including ROI segmentation, feature extraction, classification, and Grad-CAM visualization. In the evaluated test case, a dermoscopic image of a nevus was processed and correctly classified with 89.54% confidence. The system also generated an accompanying Grad-CAM heatmap highlighting the lesion regions that mainly influenced the model’s decision, ensuring the prediction is not only accurate but also transparent and clinically interpretable. 
+<img width="468" height="647" alt="image" src="https://github.com/user-attachments/assets/6cdc3a93-3663-4ea1-a4df-d2e38aee0226" />
